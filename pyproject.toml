@@ -17,6 +17,7 @@ dependencies = [
     "tqdm",
     "scipy",
     "matplotlib>=3.11.1",
+    "jiwer",
 ]
 
 [tool.uv]

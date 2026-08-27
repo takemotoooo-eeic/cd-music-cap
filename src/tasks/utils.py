@@ -29,16 +29,20 @@ class LLMJudgeWrapper:
                     model_kwargs={"torch_dtype": torch.float16},
                     device_map="auto",
                 )
+                self.pipe.model.generation_config.max_length = None
             except Exception as e:
                 raise RuntimeError(f"Failed to load local model {model_name}: {e}")
 
-    def generate(self, user_prompt: str) -> str:
+    def generate(self, user_prompt: str, system_prompt: str = None, max_new_tokens: int = 512) -> str:
+        sys_content = system_prompt if system_prompt is not None else (
+            getattr(self, "system_prompt", None) or "You are a helpful assistant and a strict judge."
+        )
+        messages = [{"role": "user", "content": user_prompt}]
+        if sys_content:
+            messages.insert(0, {"role": "system", "content": sys_content})
         if self.mode == "api":
             response = self.client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 model=self.model_name,
                 temperature=0.0,
                 top_p=1.0
@@ -46,11 +50,7 @@ class LLMJudgeWrapper:
             return response.choices[0].message.content
         
         elif self.mode == "local":
-            messages = [
-                {"role": "system", "content": "You are a helpful assistant and a strict judge."},
-                {"role": "user", "content": user_prompt}
-            ]
-            outputs = self.pipe(messages, max_new_tokens=512, do_sample=False)
+            outputs = self.pipe(messages, max_new_tokens=max_new_tokens, do_sample=False)
             return outputs[0]["generated_text"][-1]["content"]
         
         return ""

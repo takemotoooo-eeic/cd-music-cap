@@ -23,6 +23,12 @@ def get_test_task(name) -> Dataset:
         return MMAUMINIMCQASequence(
             judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
         )
+    elif name.startswith("aha"):
+        from .aha import AHASequence
+        tmp = name.split('-')
+        return AHASequence(
+            judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
+        )
     elif name.startswith("mmar"):
         from .mmar import MMARMCQASequence
         tmp = name.split('-')

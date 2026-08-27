@@ -30,6 +30,7 @@ Results will be logged under `results/[system_name]/[output_name]/[task_name]/`.
 | `sakura_[subject]` | SAKURA (subjects: `animal`, `emotion`, `gender`, `language`) |
 | `mmau-test-mini` | MMAU Mini |
 | `mmar` | MMAR |
+| `aha` | AHa-Bench (official Yes/No + ASR WER eval) |
 
 Task name suffixes:
 - `-ja`: Use API-based LLM judge (GPT-4o)
@@ -50,6 +51,9 @@ python run_benchmark.py -o test -s af3-amti -t sakura_animal-ja --model_config c
 
 # Qwen with DoLA on MMAU
 python run_benchmark.py -o test -s qwen-dola -t mmau-test-mini-ja --model_config config/dola.yaml
+
+# Qwen on AHa-Bench with local Yes/No judge
+python run_benchmark.py -o test -s qwen -t aha-jl
 ```
 
 #### Config Files

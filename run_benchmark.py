@@ -49,6 +49,7 @@ def run_single_task(system: System, output_dir: str, tname: str, batched: bool=F
     predictions = []
     golds = []
     scores = []
+    types = []
     res_list = []
     if not batched:
         for sample in tqdm(ds, total=len(ds)):
@@ -59,8 +60,11 @@ def run_single_task(system: System, output_dir: str, tname: str, batched: bool=F
             predictions.append(prediction)
             basenames.append(sample["id"])
             golds.append(sample["output"])
-            print(prediction)
-            score = ds.eval(prediction, sample["output"], sample["text_input"])
+            types.append(sample.get("type", ""))
+            eval_kwargs = {}
+            if "sample" in getattr(ds.eval, "__code__").co_varnames:
+                eval_kwargs["sample"] = sample
+            score = ds.eval(prediction, sample["output"], sample["text_input"], **eval_kwargs)
             scores.append(score)
             print(score)
     else:  # vllm, currently not supported
@@ -77,6 +81,7 @@ def run_single_task(system: System, output_dir: str, tname: str, batched: bool=F
                 predictions.append(x["prediction"])
                 basenames.append(sample["id"])
                 golds.append(sample["output"])
+                types.append(sample.get("type", ""))
                 score = ds.eval(x["prediction"], sample["output"])
                 scores.append(score)
 
@@ -89,9 +94,14 @@ def run_single_task(system: System, output_dir: str, tname: str, batched: bool=F
             "basenames": basenames,
             "predictions": predictions,
             "golds": golds,
+            "types": types,
             "all": res_list
         }
     }
+    if hasattr(ds, "instance_metrics"):
+        payload["results"]["summary"] = ds.instance_metrics(basenames, scores, types)
+    if hasattr(ds, "format_results"):
+        payload["report"] = ds.format_results(basenames, scores, types)
 
     log_results(payload, f"{output_dir}/{tname}")
 
@@ -107,12 +117,14 @@ def log_results(payload, output_dir: str):
         pickle.dump(payload, f)
 
     results = payload["results"]
-    score = sum(results["scores"]) / len(results["scores"])
-    print(f"Score: {score * 100:.2f}%")
+    report = payload.get("report")
+    if not report:
+        score = sum(results["scores"]) / len(results["scores"])
+        report = f"Score: {score * 100:.2f}%\n"
+    print(report, end="" if report.endswith("\n") else "\n")
 
-    results = payload["results"]
     with open(f'{output_dir}/results.txt', "w") as f:
-        f.write(f"Score: {score * 100:.2f}%\n")
+        f.write(report if report.endswith("\n") else report + "\n")
     with open(f'{log_dir}/predictions.txt', "w") as f:
         for orig, pred, score, basename in zip(results["golds"], results["predictions"], results["scores"], results["basenames"]):
             f.write(f"{score:.2f}|{basename}|{orig}|{pred}\n")
