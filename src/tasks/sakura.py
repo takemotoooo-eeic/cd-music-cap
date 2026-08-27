@@ -38,8 +38,19 @@ class SAKURA(object):
             self.text_inputs.append(item["text_input"])
             self.outputs.append(item["output"])
     
+    def _load_src_dataset(self):
+        repo = SAKURA.HF_MAPPING[self.subject]
+        if Define.SAKURA_DIR:
+            local_dir = os.path.join(Define.SAKURA_DIR, repo.split("/")[-1])
+            parquet_path = os.path.join(local_dir, "data", "test-00000-of-00001.parquet")
+            if os.path.isfile(parquet_path):
+                return datasets.load_dataset("parquet", data_files=parquet_path, split="train")
+            if os.path.isdir(local_dir):
+                return datasets.load_dataset(local_dir, split="test")
+        return datasets.load_dataset(repo, split="test")
+
     def parse(self):
-        src_dataset = datasets.load_dataset(SAKURA.HF_MAPPING[self.subject], split="test")
+        src_dataset = self._load_src_dataset()
 
         os.makedirs(f"{self.cache_dir}/wav", exist_ok=True)
         res = []

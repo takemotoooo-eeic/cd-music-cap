@@ -1,5 +1,10 @@
 import os
 import argparse
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from transformers import set_seed
 import yaml
 import pickle

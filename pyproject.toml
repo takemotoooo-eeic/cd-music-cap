@@ -1,0 +1,23 @@
+[project]
+name = "cd-music-cap"
+version = "0.1.0"
+description = "LALM Contrastive Decoding Error Profiles"
+requires-python = "==3.11.*"
+dependencies = [
+    "vllm==0.10.2",
+    "datasets==3.6.0",
+    "scikit-learn",
+    "accelerate",
+    "librosa",
+    "transformers",
+    "openai",
+    "python-dotenv",
+    "soundfile",
+    "pyyaml",
+    "tqdm",
+    "scipy",
+    "matplotlib>=3.11.1",
+]
+
+[tool.uv]
+package = false

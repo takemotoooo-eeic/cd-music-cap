@@ -14,22 +14,35 @@ class MMAU_MINI(object):
 
     def __init__(self):
         self.cache_dir = f"{Define.CACHE_DIR}/MMAU-MINI"
-        if not os.path.exists(self.cache_dir):
+        self.data_info_path = f"{self.cache_dir}/data_info.json"
+        if not os.path.isfile(self.data_info_path):
             self.parse()
-        with open(f"{self.cache_dir}/data_info.json", "r", encoding="utf-8") as f:
+        with open(self.data_info_path, "r", encoding="utf-8") as f:
             self.info = json.load(f)
-    
+
     def parse(self):
         root = Define.MMAU_MINI
-        with open(f"{root}/mmau-test-mini.json", "r", encoding="utf-8") as f:
+        src_json = os.path.join(root, "mmau-test-mini.json")
+        audio_dir = os.path.join(root, "test-mini-audios")
+        if not os.path.isfile(src_json):
+            raise FileNotFoundError(
+                f"MMAU mini metadata not found: {src_json}. "
+                "Set MMAU_MINI in .env to the directory containing mmau-test-mini.json and test-mini-audios/."
+            )
+        with open(src_json, "r", encoding="utf-8") as f:
             info = json.load(f)
         os.makedirs(f"{self.cache_dir}/wav", exist_ok=True)
         res = []
-        for idx, instance in tqdm(enumerate(info)):
-            wav, _ = librosa.load(f"{root}/test-mini-audios/{instance['id']}.wav", sr=16000)
-            wavfile.write(f"{self.cache_dir}/wav/{instance['id']}.wav", 16000, (wav * 32767).astype(np.int16))
+        for instance in tqdm(info):
+            src = os.path.join(audio_dir, f"{instance['id']}.wav")
+            dest = f"{self.cache_dir}/wav/{instance['id']}.wav"
+            if not os.path.isfile(src):
+                raise FileNotFoundError(f"Missing MMAU audio: {src}")
+            if not os.path.isfile(dest):
+                wav, _ = librosa.load(src, sr=16000)
+                wavfile.write(dest, 16000, (wav * 32767).astype(np.int16))
             res.append(instance)
-        with open(f"{self.cache_dir}/data_info.json", "w", encoding="utf-8") as f:
+        with open(self.data_info_path, "w", encoding="utf-8") as f:
             json.dump(res, f, indent=4)
 
     def __len__(self):
