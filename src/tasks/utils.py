@@ -7,6 +7,8 @@ from openai import OpenAI
 from transformers import pipeline
 from torch.utils.data import Dataset
 
+LOCAL_JUDGE_MODEL = "google/gemma-4-E4B-it"
+
 
 class LLMJudgeWrapper:
     """
@@ -29,7 +31,12 @@ class LLMJudgeWrapper:
                     model_kwargs={"torch_dtype": torch.float16},
                     device_map="auto",
                 )
-                self.pipe.model.generation_config.max_length = None
+                for gen_cfg in (
+                    getattr(self.pipe, "generation_config", None),
+                    getattr(self.pipe.model, "generation_config", None),
+                ):
+                    if gen_cfg is not None:
+                        gen_cfg.max_length = None
             except Exception as e:
                 raise RuntimeError(f"Failed to load local model {model_name}: {e}")
 
@@ -45,7 +52,8 @@ class LLMJudgeWrapper:
                 messages=messages,
                 model=self.model_name,
                 temperature=0.0,
-                top_p=1.0
+                top_p=1.0,
+                max_tokens=max_new_tokens,
             )
             return response.choices[0].message.content
         
@@ -89,7 +97,6 @@ def llm_as_judge(pred: str, gt: str, llm: LLMJudgeWrapper, question: str = "") -
     Judgement: <Your judgement, either "correct" or "incorrect">
     '''
     output = llm.generate(user_prompt)
-    print(output)
 
     pattern = r"Judgement:\s*(correct|incorrect)"
     match = re.search(pattern, output, re.IGNORECASE)

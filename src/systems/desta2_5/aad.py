@@ -12,22 +12,24 @@ class AADSystem(Desta2_5System):
         super().__init__(config)
         aad_config = self.model_config.get("aad", {})
         self.alpha = aad_config.get("alpha", 0.5)
-        self.threshold = aad_config.get("threshold", -1) 
+        self.threshold = aad_config.get("threshold", -1)
+        self.negative = aad_config.get("negative", "none")
+        if self.negative not in ("none", "silence"):
+            raise ValueError(f"aad.negative must be 'none' or 'silence', got {self.negative!r}")
 
     def prepare_logits_processor(
         self,
         audios: list[np.ndarray],
         transcriptions: list[str],
         texts: list[str],
-        negative_prompt: str="none"
     ) -> AADLogitsProcessor:
         # create negative context
-        if negative_prompt == "none":
+        if self.negative == "none":
             audio_neg, transcription_neg = None, None
             prompts_neg = [
                 self.format_prompt(None, None, text)
             for text in texts]
-        elif negative_prompt == "silence":
+        elif self.negative == "silence":
             audio_neg = [np.zeros_like(x) for x in audios]
             transcription_neg = [" "] * len(audio_neg)
             prompts_neg = [

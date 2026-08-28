@@ -11,7 +11,7 @@ from tqdm import tqdm
 from scipy.io import wavfile
 
 from src import Define
-from .utils import LLMJudgeWrapper
+from .utils import LLMJudgeWrapper, LOCAL_JUDGE_MODEL
 
 # Official AHa-Bench grouping (eval_metric.py): type.split("_")[0], index[:2] as sample key.
 # Display names follow the paper Table 2 column order.
@@ -211,7 +211,7 @@ class AHASequence(Dataset):
         elif judge_mode == "local":
             self.llm = LLMJudgeWrapper(
                 mode="local",
-                model_name="microsoft/Phi-3.5-mini-instruct",
+                model_name=LOCAL_JUDGE_MODEL,
             )
 
     def __len__(self):

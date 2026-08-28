@@ -9,7 +9,7 @@ dependencies = [
     "scikit-learn",
     "accelerate",
     "librosa",
-    "transformers",
+    "transformers>=5.0.0",
     "openai",
     "python-dotenv",
     "soundfile",
@@ -18,7 +18,17 @@ dependencies = [
     "scipy",
     "matplotlib>=3.11.1",
     "jiwer",
+    "spacy",
+    "desta",
+    "aac-metrics>=0.5.4,<0.6.0",
+    "wandb",
 ]
 
 [tool.uv]
 package = false
+override-dependencies = [
+    "huggingface-hub>=1.3.0",
+]
+
+[tool.uv.sources]
+desta = { path = "../DeSTA2.5-Audio", editable = true }

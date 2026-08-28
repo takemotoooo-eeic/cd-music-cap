@@ -6,12 +6,24 @@ from .audio_flamingo_3 import AudioFlamingo3System
 class AADSystem(AudioFlamingo3System):
     def __init__(self, config):
         super().__init__(config)
-        self.alpha = self.model_config.get("aad_alpha", 0.5)
-        self.threshold = self.model_config.get("aad_threshold", -1)
+        aad_config = self.model_config.get("aad", {})
+        self.alpha = aad_config.get("alpha", 0.5)
+        self.threshold = aad_config.get("threshold", -1)
+        self.negative = aad_config.get("negative", "none")
+        if self.negative not in ("none", "silence"):
+            raise ValueError(f"aad.negative must be 'none' or 'silence', got {self.negative!r}")
 
-    def prepare_logits_processor(self, texts) -> AADLogitsProcessor:
-        neg_conversation = self.format_conversation( # No Audio Input
-            texts[0]
+    def prepare_logits_processor(self, texts, audios) -> AADLogitsProcessor:
+        if self.negative == "none":
+            audio_neg = None
+        elif self.negative == "silence":
+            audio_neg = np.zeros_like(audios[0])
+        else:
+            raise NotImplementedError
+
+        neg_conversation = self.format_conversation(
+            texts[0],
+            audio_path_or_array=audio_neg,
         )
         neg_inputs = self.processor.apply_chat_template(
             neg_conversation,
@@ -42,7 +54,7 @@ class AADSystem(AudioFlamingo3System):
             return_dict=True,
         ).to(self.device)
   
-        aad_processor = self.prepare_logits_processor(texts)
+        aad_processor = self.prepare_logits_processor(texts, audios)
         
         output_ids = self.model.generate(
             **inputs,

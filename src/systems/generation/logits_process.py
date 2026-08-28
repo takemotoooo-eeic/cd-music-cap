@@ -5,6 +5,53 @@ from transformers import LogitsProcessor, DynamicCache
 from copy import deepcopy
 
 
+def _clone_rope_deltas(model):
+    rope_deltas = getattr(model, "rope_deltas", None)
+    if not torch.is_tensor(rope_deltas):
+        return rope_deltas
+    return rope_deltas.clone()
+
+
+def _restore_rope_deltas(model, rope_deltas):
+    if hasattr(model, "rope_deltas"):
+        model.rope_deltas = rope_deltas
+
+
+def _mrope_position_ids(model, cache_position, batch_size, rope_deltas):
+    """Build 3D M-RoPE ids of query length, not full attention_mask length.
+
+    Qwen2.5-Omni's `compute_3d_position_ids` expands `attention_mask` (prompt +
+    generated tokens) into `position_ids`. Nested 1-token decode then feeds a
+    length-1 query into attention whose RoPE/output is still prompt-length,
+    which crashes in `o_proj` (`(1, L * hidden)` vs `(hidden, hidden)`).
+    """
+    if not hasattr(model, "compute_3d_position_ids"):
+        return None
+    position_ids = cache_position.view(1, 1, -1).expand(3, batch_size, -1)
+    if rope_deltas is None:
+        return position_ids
+    delta = rope_deltas
+    if delta.dim() == 1:
+        delta = delta.unsqueeze(-1)
+    if delta.shape[0] != batch_size:
+        delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+    return position_ids + delta.to(device=position_ids.device)
+
+
+def _nested_omni_forward(model, **kwargs):
+    """Forward without clobbering Qwen2.5-Omni generation-time `rope_deltas`.
+
+    `generate()` stores audio-path M-RoPE deltas on the model. A nested
+    text-only/contrastive forward would overwrite them and break the main path.
+    """
+    rope_deltas_main = _clone_rope_deltas(model)
+    try:
+        outputs = model(**kwargs)
+        return outputs, _clone_rope_deltas(model)
+    finally:
+        _restore_rope_deltas(model, rope_deltas_main)
+
+
 class ContrastiveLogitsProcessor(LogitsProcessor):
     """
     Logits Processor for Contrastive Decoding.
@@ -28,6 +75,7 @@ class ContrastiveLogitsProcessor(LogitsProcessor):
         self.inputs_neg = inputs_neg
         self.atts_neg = inputs_neg["attention_mask"]
         self.past_key_values_neg: DynamicCache = None
+        self.rope_deltas_neg = None
         
         self.first_call = True
     
@@ -43,7 +91,8 @@ class ContrastiveLogitsProcessor(LogitsProcessor):
             if self.first_call:
                 self.first_call = False
 
-                outputs_neg = self.model(
+                outputs_neg, self.rope_deltas_neg = _nested_omni_forward(
+                    self.model,
                     **self.inputs_neg,
                     use_cache=True,
                     return_dict=True
@@ -63,15 +112,22 @@ class ContrastiveLogitsProcessor(LogitsProcessor):
                 # handle cache_position manually (Qwen can not automatically handle our use case)
                 past_seen_tokens = self.past_key_values_neg.get_seq_length()
                 cache_position = torch.arange(past_seen_tokens, past_seen_tokens + 1, device=last_token.device)
-                
-                outputs_neg = self.model(
+                position_ids = _mrope_position_ids(
+                    self.model, cache_position, last_token.shape[0], self.rope_deltas_neg
+                )
+
+                fwd_kwargs = dict(
                     input_ids=last_token,
                     attention_mask=self.atts_neg,
                     past_key_values=self.past_key_values_neg,
                     cache_position=cache_position,
                     use_cache=True,
-                    return_dict=True
+                    return_dict=True,
                 )
+                if position_ids is not None:
+                    fwd_kwargs["position_ids"] = position_ids
+
+                outputs_neg, _ = _nested_omni_forward(self.model, **fwd_kwargs)
                 self.past_key_values_neg = outputs_neg.past_key_values
             
             logits_neg = outputs_neg.logits[:, -1, :] # (B, V)
@@ -211,11 +267,13 @@ class AMTILogitsProcessor(LogitsProcessor):
         self.inputs_orig = inputs
         self.atts_orig = inputs["attention_mask"]
         with torch.no_grad():
-            self.past_key_values_orig = self.model(
+            outputs_orig, self.rope_deltas_orig = _nested_omni_forward(
+                self.model,
                 **self.inputs_orig,
                 use_cache=True,
-                return_dict=True
-            ).past_key_values
+                return_dict=True,
+            )
+            self.past_key_values_orig = outputs_orig.past_key_values
 
         self.first_call = True
 
@@ -254,27 +312,24 @@ class AMTILogitsProcessor(LogitsProcessor):
                 past_seen_tokens, past_seen_tokens + suffix_neg.shape[-1],
                 device=suffix_neg.device
             )
+            position_ids = _mrope_position_ids(
+                self.model, cache_position, bs, self.rope_deltas_orig
+            )
 
-            # print(self.past_key_values_orig[0][0].shape)
-            outputs_neg = self.model(  # equivalent to forward pass [inputs_orig.input_ids][suffix_neg] together
+            fwd_kwargs = dict(
                 input_ids=suffix_neg,
                 attention_mask=atts_neg,
                 past_key_values=deepcopy(self.past_key_values_orig),  # kv cache updates in-place during forward()
                 cache_position=cache_position,
                 use_cache=True,
-                return_dict=True
+                return_dict=True,
             )
-            # print(suffix_neg.shape, atts_neg.shape, outputs_neg.past_key_values[0][0].shape)
+            if position_ids is not None:
+                fwd_kwargs["position_ids"] = position_ids
+
+            outputs_neg, _ = _nested_omni_forward(self.model, **fwd_kwargs)
 
             logits_neg = outputs_neg.logits[:, -1, :] # (B, V)
-
-            # matching
-            # tmp = deepcopy(self.inputs_orig)
-            # tmp["input_ids"] = torch.cat([tmp["input_ids"], suffix_neg], dim=1)
-            # tmp["attention_mask"] = atts_neg
-            # match_neg = self.model(**tmp).logits[:, -1, :]
-            # print(torch.mean((F.softmax(match_neg, dim=-1) - F.softmax(logits_neg, dim=-1)) ** 2))
-            # assert 1 == 2
 
         # Apply Contrastive Formula
         modified_logits = (1 + self.alpha) * scores - self.alpha * logits_neg

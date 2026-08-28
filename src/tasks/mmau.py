@@ -1,4 +1,7 @@
 import os
+from collections import defaultdict
+from typing import Sequence
+
 import numpy as np
 from torch.utils.data import Dataset
 import json
@@ -7,7 +10,59 @@ from tqdm import tqdm
 from scipy.io import wavfile
 
 from src import Define
-from .utils import llm_as_judge, LLMJudgeWrapper
+from .utils import llm_as_judge, LLMJudgeWrapper, LOCAL_JUDGE_MODEL
+
+# Official MMAU domains (evaluation.py task field). Display order: Speech Sound Music Avg.
+MMAU_TASK_ORDER = [
+    ("speech", "Speech"),
+    ("sound", "Sound"),
+    ("music", "Music"),
+]
+
+
+def compute_task_metrics(
+    ids: Sequence[str],
+    scores: Sequence[float],
+    types: Sequence[str],
+) -> dict:
+    """Per-domain accuracy and overall Avg (micro-average, official MMAU overall)."""
+    if not (len(ids) == len(scores) == len(types)):
+        raise ValueError(
+            f"ids/scores/types length mismatch: {len(ids)}, {len(scores)}, {len(types)}"
+        )
+
+    groups: dict[str, list[bool]] = defaultdict(list)
+    for score, task in zip(scores, types):
+        key = (task or "").strip().lower()
+        groups[key].append(float(score) >= 0.5)
+
+    display = dict(MMAU_TASK_ORDER)
+    per_task = {}
+    ordered_keys = [k for k, _ in MMAU_TASK_ORDER if k in groups]
+    extra_keys = sorted(k for k in groups if k not in display and k)
+    for task_key in ordered_keys + extra_keys:
+        vals = groups[task_key]
+        n = len(vals)
+        n_correct = sum(1 for v in vals if v)
+        per_task[display.get(task_key, task_key)] = {
+            "key": task_key,
+            "acc": n_correct / n if n else 0.0,
+            "n": n,
+            "n_correct": n_correct,
+        }
+
+    n_all = len(scores)
+    n_correct_all = sum(1 for s in scores if float(s) >= 0.5)
+    avg = n_correct_all / n_all if n_all else 0.0
+    return {"score": avg, "per_task": per_task}
+
+
+def format_task_results(metrics: dict) -> str:
+    lines = []
+    for name, stat in metrics["per_task"].items():
+        lines.append(f"{name}: {stat['acc'] * 100:.2f}% (n={stat['n']})")
+    lines.append(f"Avg: {metrics['score'] * 100:.2f}%")
+    return "\n".join(lines) + "\n"
 
 
 class MMAU_MINI(object):
@@ -65,7 +120,7 @@ class MMAUMINIMCQASequence(Dataset):
         if judge_mode == 'api':
             judge_model_name = 'gpt-4o-2024-11-20'
         elif judge_mode == 'local':
-            judge_model_name = "microsoft/Phi-3.5-mini-instruct"
+            judge_model_name = LOCAL_JUDGE_MODEL
         # Initialize LLM here
         self.llm = LLMJudgeWrapper(
             mode=judge_mode,
@@ -91,9 +146,35 @@ class MMAUMINIMCQASequence(Dataset):
             "audio_input": sample['audio_input'],
             "text_input": full_prompt,
             "output": output.lower(),
-            "audio_path": f"{self.corpus.cache_dir}/wav/{sample['id']}.wav"
+            "audio_path": f"{self.corpus.cache_dir}/wav/{sample['id']}.wav",
+            "type": sample.get("task", ""),
         }
         return inst
     
     def eval(self, pred: str, gt: str, question: str = "") -> float:
         return llm_as_judge(pred=pred, gt=gt, llm=self.llm, question=question)
+
+    def _types_for_ids(self, ids: Sequence[str]) -> list[str]:
+        id_to_task = {rec["id"]: rec["task"] for rec in self.corpus.info}
+        missing = [i for i in ids if i not in id_to_task]
+        if missing:
+            raise KeyError(f"Unknown MMAU ids (showing up to 5): {missing[:5]}")
+        return [id_to_task[i] for i in ids]
+
+    def instance_metrics(
+        self,
+        ids: Sequence[str],
+        scores: Sequence[float],
+        types: Sequence[str] | None = None,
+    ) -> dict:
+        if types is None or not any((t or "").strip() for t in types):
+            types = self._types_for_ids(ids)
+        return compute_task_metrics(ids, scores, types)
+
+    def format_results(
+        self,
+        ids: Sequence[str],
+        scores: Sequence[float],
+        types: Sequence[str] | None = None,
+    ) -> str:
+        return format_task_results(self.instance_metrics(ids, scores, types))

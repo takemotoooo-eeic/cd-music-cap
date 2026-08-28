@@ -3,3 +3,5 @@ __pycache__/
 .venv
 _cache/
 results/
+data/audiocapbench/
+wandb/

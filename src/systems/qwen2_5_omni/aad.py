@@ -37,12 +37,30 @@ class AADBeam(object):
 class AADSystem(Qwen2_5OmniSystem):
     def __init__(self, config):
         super().__init__(config)
-        self.alpha = self.model_config["aad"].get("alpha", 0.5)
-        self.threshold = self.model_config["aad"].get("threshold", -1)
+        aad_config = self.model_config["aad"]
+        self.alpha = aad_config.get("alpha", 0.5)
+        self.threshold = aad_config.get("threshold", -1)
+        self.negative = aad_config.get("negative", "none")
+        if self.negative not in ("none", "silence"):
+            raise ValueError(f"aad.negative must be 'none' or 'silence', got {self.negative!r}")
     
-    def prepare_logits_processor(self, texts) -> AADLogitsProcessor:
-        prompts = [self.format_prompt(text, audio_exist=False) for text in texts]
-        inputs_without_audio = self.processor(text=prompts, audio=None, return_tensors="pt", padding=True).to(self.device)
+    def prepare_logits_processor(self, texts, audios) -> AADLogitsProcessor:
+        if self.negative == "none":
+            prompts = [self.format_prompt(text, audio_exist=False) for text in texts]
+            audio_neg = None
+        elif self.negative == "silence":
+            prompts = [self.format_prompt(text, audio_exist=True) for text in texts]
+            audio_neg = [np.zeros_like(x) for x in audios]
+        else:
+            raise NotImplementedError
+
+        inputs_without_audio = self.processor(
+            text=prompts,
+            audio=audio_neg,
+            return_tensors="pt",
+            padding=True,
+            sampling_rate=16000,
+        ).to(self.device)
 
         logits_processor = AADLogitsProcessor(
             self.model, 
@@ -59,7 +77,7 @@ class AADSystem(Qwen2_5OmniSystem):
         
         prompts = [self.format_prompt(text) for text in texts]
         # prepare logits processor
-        aad_logits_processor = self.prepare_logits_processor(texts)
+        aad_logits_processor = self.prepare_logits_processor(texts, audios)
         
         # Prepare inputs
         inputs = self.processor(audio=audios, text=prompts, return_tensors="pt", padding=True, sampling_rate=16000).to(self.device)
@@ -99,9 +117,18 @@ class AADSystem(Qwen2_5OmniSystem):
             sampling_rate=16000
         ).to(self.device)
 
+        if self.negative == "none":
+            prompts_neg = [self.format_prompt(text_input, audio_exist=False)]
+            audio_neg = None
+        elif self.negative == "silence":
+            prompts_neg = [self.format_prompt(text_input, audio_exist=True)]
+            audio_neg = [np.zeros_like(audio_input)]
+        else:
+            raise NotImplementedError
+
         inputs_neg = self.processor(
-            audio=None,
-            text=prompts,
+            audio=audio_neg,
+            text=prompts_neg,
             return_tensors="pt",
             padding=True,
             sampling_rate=16000

@@ -23,6 +23,12 @@ def get_test_task(name) -> Dataset:
         return MMAUMINIMCQASequence(
             judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
         )
+    elif name.startswith("ah-gen"):
+        from .ah_gen import AudioHallucinationGenSequence
+        tmp = name.split('-')
+        return AudioHallucinationGenSequence(
+            judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
+        )
     elif name.startswith("aha"):
         from .aha import AHASequence
         tmp = name.split('-')
@@ -33,6 +39,14 @@ def get_test_task(name) -> Dataset:
         from .mmar import MMARMCQASequence
         tmp = name.split('-')
         return MMARMCQASequence(
+            judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
+        )
+    elif name.startswith("audiocapbench"):
+        from .audiocapbench import AudioCapBenchSequence
+        tmp = name.split('-')
+        category = next((p for p in tmp if p in ("sound", "music", "speech")), None)
+        return AudioCapBenchSequence(
+            category=category,
             judge_mode='api' if 'ja' in tmp else ('local' if 'jl' in tmp else ''),
         )
     else:

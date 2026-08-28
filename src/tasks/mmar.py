@@ -9,7 +9,7 @@ from tqdm import tqdm
 from scipy.io import wavfile
 import tarfile
 from src import Define
-from .utils import llm_as_judge, LLMJudgeWrapper
+from .utils import llm_as_judge, LLMJudgeWrapper, LOCAL_JUDGE_MODEL
 
 class MMAR(object):
 
@@ -73,7 +73,7 @@ class MMARMCQASequence(Dataset):
         if judge_mode == 'api':
             judge_model_name = 'gpt-4o-2024-11-20'
         elif judge_mode == 'local':
-            judge_model_name = "microsoft/Phi-3.5-mini-instruct"
+            judge_model_name = LOCAL_JUDGE_MODEL
         # Initialize LLM here
         self.llm = LLMJudgeWrapper(
             mode=judge_mode,
