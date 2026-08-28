@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=acb-aad
+#SBATCH --job-name=audiocapbench-baseline
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
