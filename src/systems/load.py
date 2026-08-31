@@ -20,6 +20,7 @@ QWEN = {
     "qwen-acd": (f"{SRC_DIR}/qwen2_5_omni/acd.py", "ACDSystem"),
     "qwen-amti": (f"{SRC_DIR}/qwen2_5_omni/amti.py", "AMTISystem"),
     "qwen-dola": (f"{SRC_DIR}/qwen2_5_omni/dola.py", "DoLASystem"),
+    "qwen-avs": (f"{SRC_DIR}/qwen2_5_omni/avs.py", "AVSSystem"),
 }
 
 DESTA = {
@@ -29,6 +30,7 @@ DESTA = {
     "desta-acd": (f"{SRC_DIR}/desta2_5/acd.py", "ACDSystem"),
     "desta-amti": (f"{SRC_DIR}/desta2_5/amti.py", "AMTISystem"),
     "desta-dola": (f"{SRC_DIR}/desta2_5/dola.py", "DoLASystem"),
+    "desta-avs": (f"{SRC_DIR}/desta2_5/avs.py", "AVSSystem"),
 }
 
 AUDIO_FLAMINGO = {
@@ -37,6 +39,7 @@ AUDIO_FLAMINGO = {
     "af3-acd": (f"{SRC_DIR}/audio_flamingo_3/acd.py", "ACDSystem"),
     "af3-amti": (f"{SRC_DIR}/audio_flamingo_3/amti.py", "AMTISystem"),
     "af3-dola": (f"{SRC_DIR}/audio_flamingo_3/dola.py", "DoLASystem"),
+    "af3-avs": (f"{SRC_DIR}/audio_flamingo_3/avs.py", "AVSSystem"),
 }
 
 SYSTEM_MAPPING = {

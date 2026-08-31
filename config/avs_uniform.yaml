@@ -1,0 +1,5 @@
+avs:
+  negative: "silence" # "none" or "silence"
+  beta: 0.0
+  lambda: 0.05
+  layers: [7,11] # なんでもいい

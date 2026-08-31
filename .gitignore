@@ -6,3 +6,4 @@ results/
 data/audiocapbench/
 wandb/
 *.out
+analysis_out/

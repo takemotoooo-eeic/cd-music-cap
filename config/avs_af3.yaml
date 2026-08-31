@@ -1,0 +1,5 @@
+avs:
+  negative: "silence" # "none" or "silence"
+  beta: 0.5
+  lambda: 0.05
+  layers: [7,11] # steeringを強める最初と最後の層
