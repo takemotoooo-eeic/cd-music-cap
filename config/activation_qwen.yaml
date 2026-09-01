@@ -1,0 +1,5 @@
+activation:
+  layers: [8,12,16,20,24] # 活性値を取得する層 (1-index)
+  prompt: "Generate a detailed caption for the audio clip."
+  max_duration: 30.0
+  pool: none # none: all tokens (SAE training); mean: clip-level average
